@@ -527,23 +527,39 @@ class AttendanceApp:
             )
             return
 
-        seen = set()
+        ts       = time.time()
+        date_str = datetime.datetime.fromtimestamp(ts).strftime("%d-%m-%Y")
+        att_csv  = os.path.join(ATTENDANCE_DIR, f"Attendance_{date_str}.csv")
+
+        # Load IDs already recorded today to prevent cross-session duplicates
+        already_recorded = set()
+        if os.path.isfile(att_csv):
+            with open(att_csv, "r", newline="") as f:
+                for row in list(csv.reader(f))[1:]:  # skip header
+                    if row:
+                        already_recorded.add(row[0])  # row[0] == student ID
+
+        # Deduplicate within this session AND against today's existing records
+        seen = set(already_recorded)
         unique_records = []
         for rec in recognized_records:
             if rec[0] not in seen:
                 seen.add(rec[0])
                 unique_records.append(rec)
 
-        ts       = time.time()
-        date_str = datetime.datetime.fromtimestamp(ts).strftime("%d-%m-%Y")
-        att_csv  = os.path.join(ATTENDANCE_DIR, f"Attendance_{date_str}.csv")
         write_header = not os.path.isfile(att_csv)
-
         with open(att_csv, "a", newline="") as f:
             writer = csv.writer(f)
             if write_header:
                 writer.writerow(ATT_COLUMNS)
             writer.writerows(unique_records)
+        if not unique_records:
+            messagebox.showinfo(
+                "Already Recorded",
+                "All recognized students have already been marked present today."
+            )
+            self._refresh_treeview(att_csv)
+            return
 
         self._refresh_treeview(att_csv)
 
